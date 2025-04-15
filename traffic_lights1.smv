@@ -1,0 +1,50 @@
+MODULE main
+VAR
+  major_light : {green, yellow, red};
+  minor_light : {green, yellow, red};
+  sensor : {active, inactive};
+  car_arrival : boolean;
+
+ASSIGN
+  init(major_light) := green;
+  init(minor_light) := red;
+  init(sensor) := inactive;
+  init(car_arrival) := FALSE;
+
+  -- Transitions pour le feu principal
+  next(major_light) := case
+    major_light = green & sensor = active : yellow;
+    major_light = yellow : red;
+    major_light = red & minor_light = red : green;
+    TRUE : major_light;
+  esac;
+
+  -- Transitions pour le feu secondaire
+  next(minor_light) := case
+    minor_light = red & major_light = red : green;
+    minor_light = green : yellow;
+    minor_light = yellow : red;
+    TRUE : minor_light;
+  esac;
+
+  -- Capteur de détection des véhicules
+  next(sensor) := case
+    sensor = inactive & car_arrival : active;
+    minor_light = red : inactive;
+    TRUE : sensor;
+  esac;
+
+  -- Arrivée aléatoire des voitures
+  next(car_arrival) := {TRUE, FALSE};
+
+-- Propriétés à vérifier
+CTLSPEC AG !(major_light = green & minor_light = green)
+CTLSPEC AG (sensor = active -> AF minor_light = green)
+CTLSPEC AG (minor_light = green -> major_light = red)
+
+-- how to excute the model :
+-- ./NuSMV -int : Lancer NuSMV en mode interactif
+-- NuSMV > read_model -i traffic_lights1.smv : Charger le modèle
+-- NuSMV > go : Construire le modèle
+-- NuSMV > check_ctlspec -n 0 : Vérifier la propriété 
+-- NuSMV > show_property : Affichez toutes les propriétés définies dans le modèle

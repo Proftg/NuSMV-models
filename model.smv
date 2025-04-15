@@ -1,0 +1,36 @@
+MODULE main
+VAR
+  state : {s0, s1, s2};
+ASSIGN
+  init(state) := s0;
+  next(state) := case
+    state = s0 : s1;
+    state = s1 : s2;
+    state = s2 : s0;
+    esac;
+
+-- Propriétés CTL :
+-- 1
+-- E : Quantificateur existentiel (il existe un chemin)
+-- F : Opérateur "finalement" (à un moment dans le futur)   
+
+-- Propriété CTL : Toujours, on peut atteindre l'état `s2`
+SPEC EF (state = s2)
+
+-- 2
+-- A : Quantificateur universel (pour tous les chemins)
+-- G : Opérateur "globalement" (toujours vrai)
+
+-- Propriété CTL : Il est toujours vrai que l'état n'est pas `s2`
+SPEC AG (state != s2)
+
+- 3
+-- AG : Pour tous les chemins, il est toujours vrai que...
+-- -> : Implication (si... alors...)
+-- AF : Pour tous les chemins, finalement...
+
+-- 4
+-- Propriété CTL : Si on est dans `s1`, alors on atteindra toujours `s2`
+SPEC AG (state = s1 -> AF (state = s2))
+
+

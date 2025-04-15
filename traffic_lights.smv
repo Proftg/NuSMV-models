@@ -1,0 +1,88 @@
+MODULE main
+VAR
+  major_light : {green, yellow, red};
+  minor_light : {green, yellow, red};
+  sensor : {on, off};
+  ped_light : {green, red};
+  button : {pressed, not_pressed};
+  timer_major : 0..30;
+  timer_minor : 0..30;
+  timer_yellow : 0..5;
+  timer_delay : 0..1;
+
+ASSIGN
+  init(major_light) := green;
+  init(minor_light) := red;
+  init(sensor) := off;
+  init(ped_light) := red;
+  init(button) := not_pressed;
+  init(timer_major) := 0;
+  init(timer_minor) := 0;
+  init(timer_yellow) := 0;
+  init(timer_delay) := 0;
+
+  -- Transitions des feux principaux
+  next(major_light) := case
+    major_light = green & sensor = on & timer_major >= 30 : yellow;
+    major_light = yellow & timer_yellow >= 5 : red;
+    major_light = red & timer_minor >= 30 : green;
+    TRUE : major_light;
+  esac;
+
+  -- Transitions des feux secondaires
+  next(minor_light) := case
+    minor_light = red & sensor = on & timer_major >= 30 : green;
+    minor_light = green & timer_minor >= 30 : yellow;
+    minor_light = yellow & timer_yellow >= 5 : red;
+    TRUE : minor_light;
+  esac;
+
+  -- Mise à jour des compteurs
+  next(timer_major) := case
+    major_light = green & timer_major < 30 : timer_major + 1;
+    major_light = green & timer_major = 30 : 30;  -- Reste à 30 quand il atteint le maximum
+    TRUE : 0;
+  esac;
+
+  next(timer_minor) := case
+    minor_light = green & timer_minor < 30 : timer_minor + 1;
+    minor_light = green & timer_minor = 30 : 30;  -- Reste à 30 quand il atteint le maximum
+    TRUE : 0;
+  esac;
+
+  next(timer_yellow) := case
+    (major_light = yellow | minor_light = yellow) & timer_yellow < 5 : timer_yellow + 1;
+    (major_light = yellow | minor_light = yellow) & timer_yellow = 5 : 5;  -- Reste à 5 quand il atteint le maximum
+    TRUE : 0;
+  esac;
+
+  -- Capteur
+  next(sensor) := case
+    minor_light = red & sensor = off : {on, off}; -- Activation aléatoire
+    minor_light != red : off;
+    TRUE : sensor;
+  esac;
+
+  -- Bouton piéton
+  next(button) := {pressed, not_pressed}; -- Comportement non déterministe
+
+  -- Feux piétons
+  next(ped_light) := case
+    minor_light = red & button = pressed : green;
+    minor_light != red : red;
+    TRUE : ped_light;
+  esac;
+
+-- Propriétés de sécurité
+CTLSPEC NAME safety_lights := AG !(major_light = green & minor_light = green);
+CTLSPEC NAME safety_pedestrian := AG !(major_light = green & ped_light = green);
+CTLSPEC NAME liveness := AG (button = pressed -> AF ped_light = green);
+CTLSPEC NAME consistency := AG (ped_light = green -> major_light = green);
+
+
+-- how to excute the model :
+-- ./NuSMV -int : Lancer NuSMV en mode interactif
+-- NuSMV > read_model -i traffic_lights.smv : Charger le modèle
+-- NuSMV > go : Construire le modèle
+-- NuSMV > check_ctlspec -n 0 : Vérifier la propriété 
+-- NuSMV > show_property : Affichez toutes les propriétés définies dans le modèle

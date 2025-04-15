@@ -1,0 +1,88 @@
+MODULE main
+VAR
+  major_light : {green, yellow, red};
+  minor_light : {green, yellow, red};
+  sensor : {active, inactive};
+  car_arrival : boolean;
+  
+  -- Compteurs pour les contraintes temporelles
+  timer_minor_green : 0..30;
+  timer_yellow : 0..5;
+  timer_delay : 0..1;
+  timer_major_green : 0..30;
+
+ASSIGN
+  init(major_light) := green;
+  init(minor_light) := red;
+  init(sensor) := inactive;
+  init(car_arrival) := FALSE;
+  init(timer_minor_green) := 0;
+  init(timer_yellow) := 0;
+  init(timer_delay) := 0;
+  init(timer_major_green) := 0;
+
+  -- Transitions pour le feu principal
+  next(major_light) := case
+    major_light = green & sensor = active & timer_major_green >= 30 : yellow;
+    major_light = yellow & timer_yellow >= 5 : red;
+    major_light = red & timer_delay >= 1 & minor_light = red : green;
+    TRUE : major_light;
+  esac;
+
+  -- Transitions pour le feu secondaire
+  next(minor_light) := case
+    minor_light = red & major_light = red & timer_delay >= 1 : green;
+    minor_light = green & timer_minor_green >= 30 : yellow;
+    minor_light = yellow & timer_yellow >= 5 : red;
+    TRUE : minor_light;
+  esac;
+
+  -- Capteur de détection des véhicules
+  next(sensor) := case
+    sensor = inactive & car_arrival : active;
+    minor_light = red : inactive;
+    TRUE : sensor;
+  esac;
+
+  -- Arrivée aléatoire des voitures
+  next(car_arrival) := {TRUE, FALSE};
+
+  -- Mise à jour des compteurs
+  next(timer_minor_green) := case
+    minor_light = green & timer_minor_green < 30 : timer_minor_green + 1;
+    minor_light != green : 0;
+    TRUE : timer_minor_green;
+  esac;
+
+  next(timer_yellow) := case
+    (major_light = yellow | minor_light = yellow) & timer_yellow < 5 : timer_yellow + 1;
+    major_light != yellow & minor_light != yellow : 0;
+    TRUE : timer_yellow;
+  esac;
+
+  next(timer_delay) := case
+    (major_light = red & minor_light = red) & timer_delay < 1 : timer_delay + 1;
+    !(major_light = red & minor_light = red) : 0;
+    TRUE : timer_delay;
+  esac;
+
+  next(timer_major_green) := case
+    major_light = green & timer_major_green < 30 : timer_major_green + 1;
+    major_light != green : 0;
+    TRUE : timer_major_green;
+  esac;
+
+-- Propriétés à vérifier
+CTLSPEC AG !(major_light = green & minor_light = green)
+CTLSPEC AG (minor_light = green -> timer_minor_green <= 30)
+CTLSPEC AG ((major_light = yellow | minor_light = yellow) -> timer_yellow <= 5)
+CTLSPEC AG (major_light = green -> timer_major_green <= 30)
+CTLSPEC AG (sensor = active & timer_major_green >= 30 -> AX major_light = yellow)
+
+
+-- how to excute the model :
+-- ./NuSMV -int : Lancer NuSMV en mode interactif
+-- NuSMV > read_model -i traffic_lights.smv : Charger le modèle
+-- NuSMV > go : Construire le modèle
+-- NuSMV > check_ctlspec -n 0 : Vérifier la propriété 
+-- NuSMV > show_property : Affichez toutes les propriétés définies dans le modèle
