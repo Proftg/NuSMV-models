@@ -1,0 +1,66 @@
+MODULE main
+VAR
+  major_light : {green, yellow, red};
+  minor_light : {green, yellow, red};
+  sensor : {on, off};
+  car_arrival : {waiting, not_waiting};
+  timer_delay : 0..1;
+
+ASSIGN
+  init(major_light) := green;
+  init(minor_light) := red;
+  init(sensor) := on;
+  init(car_arrival) := not_waiting;
+  init(timer_delay) := 0;
+
+  next(major_light) := case
+    major_light = green & sensor = on & timer_delay >= 1 : yellow;
+    major_light = yellow & minor_light = green & timer_delay >= 1 : red;
+    major_light = red & minor_light = yellow & timer_delay >= 1 : green; -- Éviter red/red
+    TRUE : major_light;
+  esac;
+
+  next(minor_light) := case
+    minor_light = red & sensor = on & major_light = yellow & timer_delay >= 1 : green;
+    minor_light = green & major_light = red & timer_delay >= 1 : yellow;
+    minor_light = yellow & timer_delay >= 1 : red;
+    TRUE : minor_light;
+  esac;
+
+  next(sensor) := case
+    next(minor_light) = red & car_arrival = waiting : on;
+    next(minor_light) != red : off;
+    TRUE : off;
+  esac;
+
+  next(car_arrival) := {waiting, not_waiting};
+
+  next(timer_delay) := case
+    timer_delay < 1 : timer_delay + 1;
+    TRUE : 0;
+  esac;
+
+-- Propriétés
+CTLSPEC AG (timer_delay <= 1); -- Timer ne dépasse pas 1
+CTLSPEC AG !(major_light = green & minor_light = green);
+CTLSPEC AG !(major_light = red & minor_light = red);
+CTLSPEC AG (minor_light != red -> sensor = off);
+CTLSPEC AG (minor_light = green -> major_light = red); -- Synchronisation
+CTLSPEC AG (EF (major_light = green & minor_light = red)); -- Vivacité
+CTLSPEC AG (EF (major_light = red & minor_light = green)); -- Vivacité
+
+-- Propriétés
+-- CTLSPEC AG (major_light != next(major_light) -> timer_delay <= 1); -- Délai de 1 seconde
+-- CTLSPEC AG (minor_light != next(minor_light) -> timer_delay <= 1)
+CTLSPEC AG !(major_light = green & minor_light = green); -- Pas de conflit
+CTLSPEC AG !(major_light = red & minor_light = red); -- Pas tous rouges
+CTLSPEC AG (minor_light != red -> sensor = off); -- Désactivation du capteur
+
+
+-- how to excute the model :
+-- ./NuSMV -int : Lancer NuSMV en mode interactif
+-- NuSMV > read_model -i traffic_lights2-c.smv : Charger le modèle
+-- NuSMV > go : Construire le modèle
+-- NuSMV > check_ctlspec -n 0 : Vérifier la propriété 
+-- NuSMV > show_property : Affichez toutes les propriétés définies dans le modèle
+-- check_ctlspec

@@ -4,27 +4,25 @@ VAR
   minor_light : {green, yellow, red};
   sensor : {on, off};
   car_arrival : {waiting, not_waiting};
-  ped_light : {green, red};
-  button : {pressed, not_pressed};
+  timer_minor : 0..30;
 
 ASSIGN
   init(major_light) := green;
   init(minor_light) := red;
   init(sensor) := on;
   init(car_arrival) := not_waiting;
-  init(ped_light) := red;
-  init(button) := not_pressed;
+  init(timer_minor) := 0;
 
   next(major_light) := case
     major_light = green & sensor = on : yellow;
     major_light = yellow : red;
-    major_light = red & minor_light = red : green;
+    major_light = red & minor_light = yellow : green;
     TRUE : major_light;
   esac;
 
   next(minor_light) := case
     minor_light = red & sensor = on : green;
-    minor_light = green : yellow;
+    minor_light = green & timer_minor >= 30 : yellow;
     minor_light = yellow : red;
     TRUE : minor_light;
   esac;
@@ -37,23 +35,21 @@ ASSIGN
 
   next(car_arrival) := {waiting, not_waiting};
 
-  next(ped_light) := case
-    minor_light = red & button = pressed : green;
-    TRUE : red; -- Par défaut rouge
+  next(timer_minor) := case
+    minor_light = green & timer_minor < 30 : timer_minor + 1;
+    TRUE : 0;
   esac;
 
-  next(button) := {pressed, not_pressed};
-
 -- Propriétés
-CTLSPEC AG (ped_light = green -> minor_light = red); -- Piétons traversent seulement si minor_light = red
+CTLSPEC AG (minor_light = green -> timer_minor <= 30); -- Durée du feu vert
 CTLSPEC AG !(major_light = green & minor_light = green); -- Pas de conflit
 CTLSPEC AG !(major_light = red & minor_light = red); -- Pas tous rouges
-CTLSPEC AG (minor_light != red -> sensor = off); -- Désactivation du capteur
+CTLSPEC AG (minor_light != red -> EF sensor = off); -- Désactivation du capteur
 
 
 -- how to excute the model :
 -- ./NuSMV -int : Lancer NuSMV en mode interactif
--- NuSMV > read_model -i traffic_lights3.smv : Charger le modèle
+-- NuSMV > read_model -i traffic_lights2-a.smv : Charger le modèle
 -- NuSMV > go : Construire le modèle
 -- NuSMV > check_ctlspec -n 0 : Vérifier la propriété 
 -- NuSMV > show_property : Affichez toutes les propriétés définies dans le modèle
