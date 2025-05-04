@@ -4,52 +4,71 @@ VAR
   minor_light : {green, yellow, red};
   sensor : {on, off};
   car_arrival : {waiting, not_waiting};
-  timer_major : 0..30;
+  timer : 0..30;
 
 ASSIGN
   init(major_light) := green;
   init(minor_light) := red;
-  init(sensor) := on;
+  init(sensor) := off;  -- Initialisé à off
   init(car_arrival) := not_waiting;
-  init(timer_major) := 0;
+  init(timer) := 0;
 
   next(major_light) := case
-    major_light = green & sensor = on & timer_major >= 30 : yellow;
+    major_light = green & sensor = on : yellow;  -- Réponse immédiate au capteur
     major_light = yellow : red;
-    major_light = red & minor_light = red : green;
+    major_light = red & minor_light = yellow : green;
     TRUE : major_light;
   esac;
 
   next(minor_light) := case
-    minor_light = red & sensor = on & timer_major >= 30 : green;
-    minor_light = green : yellow;
+    minor_light = red & major_light = yellow : green;
+    minor_light = green & major_light = red : yellow;
     minor_light = yellow : red;
     TRUE : minor_light;
   esac;
 
   next(sensor) := case
-    minor_light = red & car_arrival = waiting : on;
-    minor_light != red : off;
-    TRUE : off;
+    car_arrival = waiting & minor_light = red & major_light = green : on;
+    major_light = yellow | major_light = red | minor_light = green | minor_light = yellow : off;
+    TRUE : off;  -- Par défaut, le capteur est désactivé
   esac;
 
   next(car_arrival) := {waiting, not_waiting};
 
-  next(timer_major) := case
-    major_light = green & timer_major < 30 : timer_major + 1;
+  next(timer) := case
+    major_light = green & timer < 30 : timer + 1;
+    major_light = green & timer >= 30 & next(major_light) = yellow : 0;
     TRUE : 0;
   esac;
 
 -- Propriétés
-CTLSPEC AG (sensor = on & timer_major >= 30 -> AX (minor_light = green)); -- Réponse immédiate
-CTLSPEC AG !(major_light = green & minor_light = green); -- Pas de conflit
-CTLSPEC AG !(major_light = red & minor_light = red); -- Pas tous rouges
-CTLSPEC AG (minor_light != red -> sensor = off); -- Désactivation du capteur
+CTLSPEC AG (EF (major_light = green & minor_light = red));
+CTLSPEC AG (EF (major_light = red & minor_light = green));
+CTLSPEC AG !(major_light = green & minor_light = green);
+CTLSPEC AG !(major_light = red & minor_light = red);
+CTLSPEC AG !(major_light = yellow & minor_light = yellow);
+CTLSPEC AG (major_light = green -> minor_light = red);
+CTLSPEC AG (minor_light = green -> major_light = red);
+CTLSPEC AG (EF major_light = yellow);
+CTLSPEC AG (EF minor_light = yellow);
+CTLSPEC AG (EF sensor = on);
+CTLSPEC AG (EF sensor = off);
+CTLSPEC AG (sensor = on -> EF minor_light = green);
+CTLSPEC AG (car_arrival = waiting -> EF sensor = on);
+CTLSPEC AG (minor_light != red -> sensor = off);
+CTLSPEC AG (sensor = on -> minor_light = red);
+CTLSPEC AG (major_light = yellow -> EF major_light != yellow);
+CTLSPEC AG (minor_light = yellow -> EF minor_light != yellow);
+CTLSPEC AG ((car_arrival = waiting & minor_light = red) -> EF sensor = on);
+CTLSPEC AG ((car_arrival = waiting & minor_light = red & major_light = green) -> EX sensor = on);
+CTLSPEC AG ((sensor = on & major_light = green) -> EX major_light = yellow);
+
 
 
 -- how to excute the model :
+-- ./NuSMV traffic_lights2-e.smv
 -- ./NuSMV -int : Lancer NuSMV en mode interactif
--- NuSMV > read_model -i traffic_lights2-e.smv : Charger le modèle
+-- NuSMV > read_model -i traffic_lights2-d.smv : Charger le modèle
 -- NuSMV > go : Construire le modèle
 -- NuSMV > check_ctlspec -n 0 : Vérifier la propriété 
 -- NuSMV > show_property : Affichez toutes les propriétés définies dans le modèle

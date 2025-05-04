@@ -4,14 +4,14 @@ VAR
   minor_light : {green, yellow, red};
   sensor : {on, off};
   car_arrival : {waiting, not_waiting};
-  timer_minor : 0..30;
+  timer : 0..30;
 
 ASSIGN
   init(major_light) := green;
   init(minor_light) := red;
   init(sensor) := on;
   init(car_arrival) := not_waiting;
-  init(timer_minor) := 0;
+  init(timer) := 0;
 
   next(major_light) := case
     major_light = green & sensor = on : yellow;
@@ -21,33 +21,55 @@ ASSIGN
   esac;
 
   next(minor_light) := case
-    minor_light = red & sensor = on : green;
-    minor_light = green & timer_minor >= 30 : yellow;
+    minor_light = red & major_light = yellow : green;
+    minor_light = green & major_light = red & timer >= 30 : yellow;
     minor_light = yellow : red;
     TRUE : minor_light;
   esac;
 
   next(sensor) := case
-    minor_light = red & car_arrival = waiting : on;
-    minor_light != red : off;
+    next(minor_light) = red & car_arrival = waiting : on;
+    next(minor_light) != red : off;
     TRUE : off;
   esac;
 
   next(car_arrival) := {waiting, not_waiting};
 
-  next(timer_minor) := case
-    minor_light = green & timer_minor < 30 : timer_minor + 1;
+  next(timer) := case
+    minor_light = green & timer < 30 : timer + 1;
+    minor_light = green & timer >= 30 & next(minor_light) = yellow : 0;
     TRUE : 0;
   esac;
 
 -- Propriétés
-CTLSPEC AG (minor_light = green -> timer_minor <= 30); -- Durée du feu vert
-CTLSPEC AG !(major_light = green & minor_light = green); -- Pas de conflit
-CTLSPEC AG !(major_light = red & minor_light = red); -- Pas tous rouges
-CTLSPEC AG (minor_light != red -> EF sensor = off); -- Désactivation du capteur
+CTLSPEC AG (EF (major_light = green & minor_light = red));
+CTLSPEC AG (EF (major_light = red & minor_light = green));
+CTLSPEC AG !(major_light = green & minor_light = green);
+CTLSPEC AG !(major_light = red & minor_light = red);
+CTLSPEC AG !(major_light = yellow & minor_light = yellow);
+CTLSPEC AG (major_light = green -> minor_light = red);
+CTLSPEC AG (minor_light = green -> major_light = red);
+CTLSPEC AG (EF major_light = yellow);
+CTLSPEC AG (EF minor_light = yellow);
+CTLSPEC AG (EF sensor = on);
+CTLSPEC AG (EF sensor = off);
+CTLSPEC AG (sensor = on -> EF minor_light = green);
+CTLSPEC AG (car_arrival = waiting -> EF sensor = on);
+CTLSPEC AG (minor_light != red -> sensor = off);
+CTLSPEC AG (sensor = on -> minor_light = red);
+CTLSPEC AG (major_light = yellow -> EF major_light != yellow);
+CTLSPEC AG (minor_light = yellow -> EF minor_light != yellow);
+CTLSPEC AG ((car_arrival = waiting & minor_light = red) -> EF sensor = on);
+CTLSPEC AG (timer <= 30); -- Le timer ne dépasse pas 30
+CTLSPEC AG (minor_light = yellow -> timer = 0); -- Le timer est à 0 quand minor_light est jaune
+CTLSPEC AG (minor_light != green -> timer = 0); -- Le timer est à 0 quand minor_light n’est pas vert
+CTLSPEC AG (EF (timer = 30)); -- Le timer peut atteindre 30 depuis tout état
+CTLSPEC AG (minor_light = green -> EF (timer >= 30)); -- Si vert, le timer peut atteindre >= 30
+
 
 
 -- how to excute the model :
+-- ./NuSMV traffic_lights2-a.smv
 -- ./NuSMV -int : Lancer NuSMV en mode interactif
 -- NuSMV > read_model -i traffic_lights2-a.smv : Charger le modèle
 -- NuSMV > go : Construire le modèle
