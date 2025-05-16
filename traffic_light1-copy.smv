@@ -4,19 +4,18 @@ VAR
   minor_light : {green, yellow, red};
   sensor : {on, off};
   car_arrival : {yes, no};
-  car_must_arrive : boolean; -- Variable pour forcer l'arrivée d'une voiture
 
 ASSIGN
   init(major_light) := green;
   init(minor_light) := red;
-  init(sensor) := off;  
-  init(car_arrival) := no;
-  init(car_must_arrive) := TRUE; -- Initialement, une voiture doit arriver
+  init(sensor) := on;  
+  init(car_arrival) := yes;
 
   next(major_light) := case
     major_light = green & sensor = on & car_arrival = yes : yellow;
     major_light = yellow : red;  
-    major_light = red & minor_light = yellow : green; 
+    major_light = red & minor_light = yellow : green;
+    minor_light = red : green; 
     TRUE : major_light;
   esac;
 
@@ -33,22 +32,12 @@ ASSIGN
     TRUE : off;
   esac;
 
-  -- Modification de la règle pour car_arrival pour garantir qu'une voiture arrive éventuellement
-  next(car_arrival) := case
-    car_must_arrive : yes; -- Si une voiture doit arriver, elle arrive
-    TRUE : {yes, no}; -- Sinon, comportement non déterministe
-  esac;
-
-  -- Une fois qu'une voiture est arrivée, nous n'avons plus besoin d'en forcer l'arrivée
-  next(car_must_arrive) := case
-    car_arrival = yes : FALSE; -- Une fois qu'une voiture est arrivée, désactiver la contrainte
-    TRUE : car_must_arrive; -- Sinon, maintenir l'état actuel
-  esac;
+  next(car_arrival) := {yes, no};
 
 -- Propriétés
 CTLSPEC AG (EF (major_light = green & minor_light = red)); --  Dans tous les états, il existe un chemin où Les états par défaut sont atteints
 CTLSPEC AG (EF (major_light = red & minor_light = green)); 
-CTLSPEC AG !(major_light = green & minor_light = green); -- Dans tous les états , il n'est jamais vrai que les deux feux sont verts simultanément
+CTLSPEC AG !(major_light = green & minor_light = green); -- Dans tous les états , il n’est jamais vrai que les deux feux sont verts simultanément
 CTLSPEC AG !(major_light = red & minor_light = red);
 CTLSPEC AG !(major_light = yellow & minor_light = yellow);
 CTLSPEC AG (major_light = green -> minor_light = red); -- Dans tous les états, si major_light = green, alors minor_light = red.
@@ -61,10 +50,7 @@ CTLSPEC AG (sensor = on -> EF minor_light = green);  -- Dans tous les états, si
 CTLSPEC AG (car_arrival = yes -> EF sensor = on);
 CTLSPEC AG (minor_light != red -> sensor = off);
 CTLSPEC AG (sensor = on -> minor_light = red);
-
--- Cette propriété est maintenant vraie car nous garantissons qu'une voiture arrive éventuellement
-CTLSPEC A[major_light = green U (car_arrival = yes & sensor = on)]; -- Major_light reste green jusqu'a car_arrival = yes 
-
+CTLSPEC A [major_light = green U (car_arrival = yes & sensor = on)]; -- Major_light reste green jusqu'a car_arrival = yes 
 CTLSPEC AG (major_light = green & car_arrival = yes & sensor = on -> AX major_light = yellow); -- Si major_light = vert ET car_arrival = yes, alors dans l'état suivant, major_light = yellow
 CTLSPEC AG ((major_light = red & minor_light = red) -> AF(major_light = green | minor_light = green)); -- Si major_light et minor_light sont red, l'un deux finira par etre vert
 CTLSPEC AG !(major_light = green & minor_light = green); -- Major_lightet minor_light ne sont jamais green en meme temps

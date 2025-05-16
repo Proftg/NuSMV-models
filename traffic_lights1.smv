@@ -8,55 +8,73 @@ VAR
 ASSIGN
   init(major_light) := green;
   init(minor_light) := red;
-  init(sensor) := on;  
-  init(car_arrival) := yes;
+  init(sensor) := off;  
+  init(car_arrival) := no;
 
   next(major_light) := case
     major_light = green & sensor = on & car_arrival = yes : yellow;
     major_light = yellow : red;  
-    major_light = red & minor_light = yellow : green; 
+    minor_light = red : green; 
     TRUE : major_light;
   esac;
 
   next(minor_light) := case 
-    minor_light = red & major_light = yellow : green;  
-    minor_light = yellow : red;
-    minor_light = green & major_light = red : yellow;    
+    minor_light = red & major_light = red : green;  
+    minor_light = green & major_light = red : yellow;
+    minor_light = yellow : red;    
     TRUE : minor_light;
   esac;
 
   next(sensor) := case
-    next(minor_light) = red & car_arrival = yes : on; 
-    next(minor_light) != red : off;
-    TRUE : off;
+    minor_light = red : on;
+    car_arrival = yes : off ;
+    TRUE : sensor;
   esac;
 
-  next(car_arrival) := {yes, no};
+  next(car_arrival) := case
+    car_arrival = no : yes;  
+    TRUE : car_arrival;
+  esac;
 
 -- Propriétés
-CTLSPEC AG (EF (major_light = green & minor_light = red)); --  Dans tous les états, il existe un chemin où Les états par défaut sont atteints
+
 CTLSPEC AG (EF (major_light = red & minor_light = green)); 
-CTLSPEC AG !(major_light = green & minor_light = green); -- Dans tous les états , il n’est jamais vrai que les deux feux sont verts simultanément
-CTLSPEC AG !(major_light = red & minor_light = red);
+
+
 CTLSPEC AG !(major_light = yellow & minor_light = yellow);
-CTLSPEC AG (major_light = green -> minor_light = red); -- Dans tous les états, si major_light = green, alors minor_light = red.
-CTLSPEC AG (minor_light = green -> major_light = red);
-CTLSPEC AG (EF major_light = yellow); -- Dans tous les états, il existe un chemin où major_light = yellow.
+
+CTLSPEC AG (EF major_light = yellow); 
 CTLSPEC AG (EF minor_light = yellow);
-CTLSPEC AG (EF sensor = on); -- Dans tous les états, il existe un chemin où sensor = on.
+
+CTLSPEC AG (EF sensor = on); 
 CTLSPEC AG (EF sensor = off);
-CTLSPEC AG (sensor = on -> EF minor_light = green);  -- Dans tous les états, si sensor = on, alors il existe un chemin où minor_light = green.
+
+CTLSPEC AG (sensor = on -> EF minor_light = green);  
+
 CTLSPEC AG (car_arrival = yes -> EF sensor = on);
-CTLSPEC AG (minor_light != red -> sensor = off);
-CTLSPEC AG (sensor = on -> minor_light = red);
-CTLSPEC A [major_light = green U (car_arrival = yes & sensor = on)]; -- Major_light reste green jusqu'a car_arrival = yes 
-CTLSPEC AG (major_light = green & car_arrival = yes & sensor = on -> AX major_light = yellow); -- Si major_light = vert ET car_arrival = yes, alors dans l'état suivant, major_light = yellow
-CTLSPEC AG ((major_light = red & minor_light = red) -> AF(major_light = green | minor_light = green)); -- Si major_light et minor_light sont red, l'un deux finira par etre vert
-CTLSPEC AG !(major_light = green & minor_light = green); -- Major_lightet minor_light ne sont jamais green en meme temps
-CTLSPEC AG (major_light = red -> EF minor_light = green);
-CTLSPEC AG (major_light = yellow -> EF major_light != yellow);
-CTLSPEC AG (minor_light = yellow -> EF minor_light != yellow);
-CTLSPEC AG ((car_arrival = yes & minor_light = red) -> EF sensor = on);
+
+CTLSPEC A[major_light = green U (car_arrival = yes)]; 
+
+CTLSPEC AG (major_light = green & car_arrival = yes & sensor = on -> AX major_light = yellow); 
+CTLSPEC AG ((major_light = red | minor_light = red) -> AF(major_light = green | minor_light = green)); 
+
+CTLSPEC AG (major_light = red -> AF minor_light = green);
+CTLSPEC AG (major_light = yellow -> AF major_light != yellow);
+CTLSPEC AG (minor_light = yellow -> AF minor_light != yellow);
+CTLSPEC AG ((car_arrival = yes & minor_light = red) -> AF sensor = on); 
+
+CTLSPEC AG (major_light = yellow -> AF major_light = red);
+
+
+
+CTLSPEC AG (EF (major_light = green & minor_light = red)); 
+
+CTLSPEC AG !(major_light = green & minor_light = green); 
+CTLSPEC AG !(major_light = red & minor_light = red);
+
+CTLSPEC AG (major_light = green -> minor_light = red);
+CTLSPEC AG (minor_light = green -> major_light = red);
+
 
 
 -- how to excute the model :

@@ -3,60 +3,52 @@ VAR
   major_light : {green, yellow, red};
   minor_light : {green, yellow, red};
   sensor : {on, off};
-  car_arrival : {waiting, not_waiting};
-  timer : 0..30;
+  car_arrival : {yes, no};
   pedestrian_button : {pressed, not_pressed};
   crossing_state : {inactive, active, finishing};
-  crossing_timer : 0..15;
 
 ASSIGN
   init(major_light) := green;
   init(minor_light) := red;
   init(sensor) := off;
-  init(car_arrival) := not_waiting;
-  init(timer) := 0;
+  init(car_arrival) := no;
   init(pedestrian_button) := not_pressed;
   init(crossing_state) := inactive;
-  init(crossing_timer) := 0;
 
   -- Transition des feux principaux
   next(major_light) := case
-    -- Transition normale
-    major_light = green & (sensor = on | (pedestrian_button = pressed & crossing_state = inactive)) & timer >= 10 : yellow;
-    major_light = yellow & timer >= 5 : red;
-    major_light = red & minor_light = yellow & timer >= 5 : green;
+    -- Transition au jaune si un véhicule est détecté ou si un piéton a appuyé sur le bouton
+    major_light = green & (sensor = on | (pedestrian_button = pressed & crossing_state = inactive)) : yellow;
+    major_light = yellow : red;
+    -- Attendre que le passage piéton soit terminé avant de revenir au vert
+    major_light = red & minor_light = red & crossing_state = finishing : green;
+    -- Pas de piéton en attente
+    major_light = red & minor_light = red & crossing_state = inactive : green;
     TRUE : major_light;
   esac;
 
   -- Transition des feux secondaires
   next(minor_light) := case
-    -- Passage au vert quand la route principale est rouge
-    minor_light = red & major_light = yellow & timer >= 5 : green;
+    -- Passage au vert quand la route principale est rouge et qu'il n'y a pas de piéton en attente
+    minor_light = red & major_light = red & pedestrian_button = not_pressed : green;
     
     -- Passage au jaune après un certain temps ou si un piéton a appuyé sur le bouton
-    minor_light = green & ((timer >= 20) | (pedestrian_button = pressed & crossing_timer >= 5)) : yellow;
+    minor_light = green & (car_arrival = no | pedestrian_button = pressed) : yellow;
     
     -- Passage au rouge après le jaune
-    minor_light = yellow & timer >= 5 : red;
+    minor_light = yellow : red;
     
     TRUE : minor_light;
   esac;
 
   -- Détection des véhicules
   next(sensor) := case
-    car_arrival = waiting & minor_light = red & major_light = green : on;
+    car_arrival = yes & minor_light = red & major_light = green : on;
     major_light = yellow | major_light = red | minor_light = green | minor_light = yellow : off;
-    TRUE : off;
+    TRUE : sensor;
   esac;
 
-  next(car_arrival) := {waiting, not_waiting};
-
-  -- Timer principal
-  next(timer) := case
-    next(major_light) != major_light | next(minor_light) != minor_light : 0;
-    timer < 30 : timer + 1;
-    TRUE : timer;
-  esac;
+  next(car_arrival) := {yes, no};
 
   -- Gestion du bouton piéton
   next(pedestrian_button) := case
@@ -64,74 +56,53 @@ ASSIGN
     TRUE : {pressed, not_pressed};  -- Peut être pressé à tout moment
   esac;
 
-  -- État du passage piéton
+  -- État du passage piéton - spécifiquement conçu pour s'activer uniquement quand les feux secondaires sont rouges
   next(crossing_state) := case
-    -- Activation du passage quand les feux secondaires deviennent rouges et qu'une demande existe
-    crossing_state = inactive & next(minor_light) = red & pedestrian_button = pressed : active;
+    -- Activation du passage quand les feux secondaires sont rouges et qu'une demande existe
+    crossing_state = inactive & minor_light = red & pedestrian_button = pressed : active;
     
-    -- Fin du temps de traversée
-    crossing_state = active & crossing_timer >= 10 : finishing;
+    -- Fin du temps de traversée (transition sans timer)
+    crossing_state = active : finishing;
     
     -- Retour à l'état inactif
-    crossing_state = finishing : inactive;
+    crossing_state = finishing & minor_light = red : inactive;
     
     TRUE : crossing_state;
   esac;
 
-  -- Timer du passage piéton
-  next(crossing_timer) := case
-    crossing_state = active & crossing_timer < 15 : crossing_timer + 1;
-    crossing_state != active : 0;
-    TRUE : crossing_timer;
-  esac;
+-- Propriétés de base des feux de circulation
+CTLSPEC AG (EF (major_light = green & minor_light = red));  -- Il est toujours possible d'atteindre un état où le feu principal est vert et le secondaire rouge
+CTLSPEC AG (EF (major_light = red & minor_light = green));  -- Il est toujours possible d'atteindre un état où le feu principal est rouge et le secondaire vert
+CTLSPEC AG !(major_light = green & minor_light = green);    -- Les deux feux ne peuvent jamais être verts en même temps
+CTLSPEC AG !(major_light = yellow & minor_light = yellow);  -- Les deux feux ne peuvent jamais être jaunes en même temps
+CTLSPEC AG (major_light = green -> minor_light = red);      -- Si le feu principal est vert, le secondaire doit être rouge
+CTLSPEC AG (minor_light = green -> major_light = red);      -- Si le feu secondaire est vert, le principal doit être rouge
 
--- Propriétés
-CTLSPEC AG (EF (major_light = green & minor_light = red));
-CTLSPEC AG (EF (major_light = red & minor_light = green));
-CTLSPEC AG !(major_light = green & minor_light = green);
-CTLSPEC AG !(major_light = red & minor_light = red);
-CTLSPEC AG !(major_light = yellow & minor_light = yellow);
-CTLSPEC AG (major_light = green -> minor_light = red);
-CTLSPEC AG (minor_light = green -> major_light = red);
+-- Propriétés de vivacité
+CTLSPEC AG (car_arrival = yes -> EF sensor = on);                    -- Une voiture en attente sera éventuellement détectée
+CTLSPEC AG (sensor = on -> EF minor_light = green);                      -- Si un véhicule est détecté, les feux secondaires passeront éventuellement au vert
+
+-- Propriétés de sécurité
+CTLSPEC AG ((crossing_state = active | crossing_state = finishing) -> minor_light = red);  -- Le passage n'est actif que lorsque les feux secondaires sont rouges
+CTLSPEC AG (minor_light = green -> crossing_state = inactive);           -- Les feux secondaires ne sont verts que lorsque le passage est inactif
+
+-- Propriétés spécifiques à la question 3
+CTLSPEC AG (pedestrian_button = pressed & minor_light = green -> EF minor_light = red);  -- Si un piéton appuie sur le bouton quand le feu secondaire est vert, ce dernier passera éventuellement au rouge
+CTLSPEC AG (pedestrian_button = pressed & minor_light = red -> EF crossing_state = active);  -- Si un piéton appuie sur le bouton quand le feu secondaire est déjà rouge, le passage s'activera
+CTLSPEC AG (crossing_state = active -> AX crossing_state = finishing);  -- Le passage actif passe toujours à l'état "finishing" au prochain état (sans timer)
+CTLSPEC AG (crossing_state = finishing & minor_light = red -> EF crossing_state = inactive);  -- Le passage finira par revenir à l'état inactif
 
 -- Propriétés spécifiques au passage piéton
-
-CTLSPEC AG (pedestrian_button = pressed -> EF crossing_state = active);
-CTLSPEC AG (crossing_state = active -> EF crossing_state = inactive);
-
-
+CTLSPEC AG (pedestrian_button = pressed -> EF crossing_state = active);  -- Si le bouton est pressé, le passage sera éventuellement activé
+CTLSPEC AG (crossing_state = active -> EF crossing_state = inactive);    -- Le passage piéton finira par revenir à l'état inactif
+CTLSPEC AG (crossing_state = active -> minor_light = red);               -- Le passage n'est actif que lorsque les feux secondaires sont rouges
+CTLSPEC AG (pedestrian_button = pressed -> AF (crossing_state = active | pedestrian_button = not_pressed));  -- Une demande de passage sera toujours traitée
 
 -- how to excute the model :
--- ./NuSMV traffic_lights3.smv
+-- ./NuSMV traffic_light1.smv
 -- ./NuSMV -int : Lancer NuSMV en mode interactif
--- NuSMV > read_model -i traffic_lights3.smv : Charger le modèle
+-- NuSMV > read_model -i traffic_light1.smv : Charger le modèle
 -- NuSMV > go : Construire le modèle
 -- NuSMV > check_ctlspec -n 0 : Vérifier la propriété 
 -- NuSMV > show_property : Affichez toutes les propriétés définies dans le modèle
--- check_ctlspec
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
--- CTLSPEC AG (crossing_state = active -> minor_light = red);
+-- NuSMV > check_ctlspec
